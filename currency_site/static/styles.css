@@ -1,83 +1,83 @@
-/* Global Styles */
 body {
-    font-family: 'Arial', sans-serif;
+    font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #f8f9fa; /* Light background */
+    background-color: #f4f4f9;
 }
 
 header {
-    background-color: #0056b3; /* Blue background */
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    background-color: #007bff;
+    padding: 1rem;
+    text-align: center;
+    color: white;
 }
 
 nav {
     display: flex;
     justify-content: center;
-    padding: 15px 0;
-}
-
-.menu {
-    list-style-type: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
     gap: 20px;
 }
 
-.menu li {
-    display: inline;
+ul.menu {
+    display: flex;
+    list-style: none;
+    gap: 20px;
+    padding: 0;
 }
 
-.menu a {
+ul.menu a {
     text-decoration: none;
     color: white;
     font-weight: bold;
-    padding: 8px 15px;
-    border-radius: 5px;
-    transition: background-color 0.3s ease;
 }
 
-.menu a:hover {
-    background-color: #003f7f; /* Darker blue */
-}
-
-.content {
-    max-width: 800px;
-    margin: 30px auto;
+main {
     padding: 20px;
-    background-color: #ffffff;
-    border-radius: 10px;
+    max-width: 900px;
+    margin: auto;
+    background-color: white;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-h1, h2 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 20px;
+    border-radius: 8px;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 20px;
 }
 
 table th, table td {
-    border: 1px solid #ddd;
-    padding: 10px;
+    padding: 12px;
     text-align: left;
+    border: 1px solid #ddd;
 }
 
 table th {
-    background-color: #0056b3;
+    background-color: #007bff;
     color: white;
 }
 
-table tr:nth-child(even) {
-    background-color: #f2f2f2;
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+    margin: auto;
 }
 
-table tr:hover {
-    background-color: #e9ecef;
+form input, form select {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+form button {
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+form button:hover {
+    background-color: #0056b3;
 }

@@ -1,6 +1,31 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h1>Currency Exchange</h1>
-    <p>Here you can convert between different currencies (functionality to be added).</p>
+<h2>Currency Exchange</h2>
+<form action="/exchange" method="POST">
+    <label for="amount">Amount</label>
+    <input type="number" name="amount" required>
+
+    <label for="from_currency">From Currency</label>
+    <select name="from_currency" required>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+        <option value="GBP">GBP</option>
+        <option value="JPY">JPY</option>
+    </select>
+
+    <label for="to_currency">To Currency</label>
+    <select name="to_currency" required>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+        <option value="GBP">GBP</option>
+        <option value="JPY">JPY</option>
+    </select>
+
+    <button type="submit">Convert</button>
+</form>
+
+{% if conversion_result %}
+    <h3>Converted Amount: {{ conversion_result }} {{ to_currency }}</h3>
+{% endif %}
 {% endblock %}
