@@ -1,0 +1,37 @@
+<!-- dashboard_student.html -->
+{% extends 'dashboard_base.html' %}
+
+{% block content %}
+    <h2>Ваші оцінки</h2>
+    <form method="POST" action="{{ url_for('dashboard') }}">
+        <label for="subject">Виберіть предмет:</label>
+        <select name="subject" required>
+            {% for subject in subjects %}
+                <option value="{{ subject }}">{{ subject }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Переглянути оцінки</button>
+    </form>
+
+    {% if grades_for_subject %}
+        <h3>Оцінки студентів за предметом: {{ request.form['subject'] }}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Студент</th>
+                    <th>Оцінка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for student, grades in students_grades.items() %}
+                    {% for grade in grades %}
+                        <tr>
+                            <td>{{ student }}</td>
+                            <td>{{ grade }}</td>
+                        </tr>
+                    {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

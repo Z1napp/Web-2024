@@ -1,0 +1,18 @@
+<!-- dashboard_admin.html -->
+{% extends 'dashboard_base.html' %}
+
+{% block content %}
+  <p>Адміністратор має повний доступ до всіх функцій.</p>
+  <form action="{{ url_for('add_student') }}" method="POST">
+    <label for="login">Логін:</label>
+    <input type="text" id="login" name="login" required>
+    <label for="password">Пароль:</label>
+    <input type="password" id="password" name="password" required>
+    <label for="role">Роль:</label>
+    <select name="role" id="role" required>
+      <option value="student">Студент</option>
+      <option value="teacher">Викладач</option>
+    </select>
+    <button type="submit">Додати студента</button>
+  </form>
+{% endblock %}

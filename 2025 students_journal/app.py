@@ -1,88 +1,190 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-import sqlite3
+from flask import Flask, render_template, redirect, url_for, request, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-import redis
-import json
-import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
 
-# Redis-клієнт
-r = redis.Redis(host='redis', port=6379, decode_responses=True)
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
 
-DB_PATH = 'instance/users.db'
+# --- Модель користувача ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    login = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='student')
 
-def init_db():
-    os.makedirs('instance', exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
-            login TEXT UNIQUE,
-            email TEXT UNIQUE,
-            password TEXT,
-            role TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        login = request.form['login']
-        email = request.form['email']
-        password = generate_password_hash(request.form['password'])
-        role = request.form['role']
+# --- Модель оцінок ---
+class Grade(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    subject = db.Column(db.String(100), nullable=False)
+    grade = db.Column(db.String(2), nullable=False)
 
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        try:
-            c.execute("INSERT INTO users (login, email, password, role) VALUES (?, ?, ?, ?)",
-                      (login, email, password, role))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            return "Користувач з таким логіном або email вже існує"
-        finally:
-            conn.close()
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    student = db.relationship('User', foreign_keys=[student_id], backref='grades')
 
-        return redirect(url_for('login'))
-    return render_template('register.html')
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    teacher = db.relationship('User', foreign_keys=[teacher_id])
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        login = request.form['login']
-        password = request.form['password']
 
-        cached_user = r.get(f"user:{login}")
-        if cached_user:
-            user = json.loads(cached_user)
-        else:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT * FROM users WHERE login = ?", (login,))
-            row = c.fetchone()
-            conn.close()
-            if row:
-                user = {'id': row[0], 'login': row[1], 'password': row[3], 'role': row[4]}
-                r.set(f"user:{login}", json.dumps(user), ex=3600)
-            else:
-                user = None
 
-        if user and check_password_hash(user['password'], password):
-            session['user'] = user['login']
-            session['role'] = user['role']
-            return f"Вітаю, {user['login']}! Ваша роль: {user['role']}"
-        return "Невірний логін або пароль"
-    return render_template('login.html')
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 
 @app.route('/')
 def home():
-    return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
+
+
+
+
+# --- Панель користувача ---
+@app.route('/dashboard', methods=['GET', 'POST'])
+@login_required
+def dashboard():
+    students = User.query.filter_by(role='student').all()
+    subjects = [
+        "Математика",
+        "Фізика",
+        "Історія",
+        "Біологія",
+        "Хімія",
+        "Географія",
+        "Література"
+    ]
+
+    # Для студента
+    if current_user.role == 'student':
+        grades = {grade.subject: grade.grade for grade in current_user.grades}
+
+        if request.method == 'POST':
+            selected_subject = request.form['subject']
+            grades_for_subject = Grade.query.filter_by(subject=selected_subject).all()
+            students_grades = {student.login: [] for student in students}
+
+            for grade in grades_for_subject:
+                student = User.query.get(grade.student_id)
+                students_grades[student.login].append(grade.grade)
+
+            return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, grades=grades, subjects=subjects, students_grades=students_grades, selected_subject=selected_subject)
+
+        return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, grades=grades, subjects=subjects)
+
+    # Для викладача
+    elif current_user.role == 'teacher':
+
+
+        return render_template('dashboard_teacher.html', name=current_user.login, role=current_user.role, students=students, subjects=subjects)
+
+    # Для адміністратора
+    elif current_user.role == 'admin':
+        return render_template('dashboard_admin.html', name=current_user.login, role=current_user.role)
+
+    return redirect(url_for('logout'))
+
+
+
+# --- Додати оцінку ---
+@app.route('/add_grade', methods=['POST'])
+@login_required
+def add_grade():
+    if current_user.role in ['teacher', 'admin']:
+        subject = request.form['subject']
+        grade = request.form['grade']
+        student_id = request.form['student_id']
+
+        new_grade = Grade(subject=subject, grade=grade, student_id=student_id)
+        db.session.add(new_grade)
+        db.session.commit()
+
+        flash('Оцінка додана успішно!')
+    return redirect(url_for('dashboard'))
+
+
+# --- Додати студента ---
+@app.route('/add_student', methods=['POST'])
+@login_required
+def add_student():
+    if current_user.role == 'admin':
+        login = request.form['login']
+        password = request.form['password']
+        role = request.form['role']
+
+        new_user = User(login=login, password=generate_password_hash(password), role=role)
+        db.session.add(new_user)
+        db.session.commit()
+
+        flash('Студент доданий успішно!')
+    return redirect(url_for('dashboard'))
+
+
+# --- Сторінка авторизації ---
+@app.route('/auth')
+def auth():
+    mode = request.args.get('mode', 'login')
+    return render_template('auth.html', mode=mode)
+
+
+
+# --- Обробка логіну ---
+# --- Вхід (GET + POST) ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        login_input = request.form['login']
+        password_input = request.form['password']
+        user = User.query.filter_by(login=login_input).first()
+
+        if user and check_password_hash(user.password, password_input):
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        flash('Неправильний логін або пароль')
+        return redirect(url_for('auth'))
+
+    # GET-запит показує форму авторизації
+    return render_template('auth.html')
+
+
+
+# --- Обробка реєстрації ---
+@app.route('/register', methods=['POST'])
+def register():
+    login_name = request.form['login']
+    password = request.form['password']
+    role = request.form.get('role', 'student')
+
+    if User.query.filter_by(login=login_name).first():
+        flash('Користувач з таким логіном вже існує.')
+        return redirect(url_for('auth'))
+
+    new_user = User(login=login_name, password=generate_password_hash(password), role=role)
+    db.session.add(new_user)
+    db.session.commit()
+
+    flash('Реєстрація успішна! Увійдіть в акаунт.')
+    return redirect(url_for('auth'))
+
+
+# --- Вихід ---
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('auth'))
+
+
+# --- Створити БД ---
+with app.app_context():
+    db.create_all()
+
 
 if __name__ == '__main__':
-    init_db()
     app.run(host='0.0.0.0', port=8000, debug=True)

@@ -1,0 +1,30 @@
+<!-- dashboard_base.html -->
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Кабінет</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+  <!-- Навігаційна панель -->
+  <div id="navbar">
+    <div id="user-info">
+      <p>Вітаємо, {{ name }}!</p>
+      <p>Ваша роль: {{ role }}</p>
+    </div>
+    <a href="{{ url_for('logout') }}" id="logout-button">Вийти</a>
+  </div>
+
+  <!-- Заголовок -->
+  <div id="header">
+    <h1>Електронний щоденник</h1>
+  </div>
+
+  <!-- Контент для ролі -->
+  <div id="content">
+    {% block content %}{% endblock %}
+  </div>
+
+</body>
+</html>

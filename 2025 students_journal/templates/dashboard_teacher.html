@@ -1,0 +1,24 @@
+<!-- dashboard_teacher.html -->
+{% extends 'dashboard_base.html' %}
+
+{% block content %}
+  <p>Керувати журналом:</p>
+  <form action="{{ url_for('add_grade') }}" method="POST">
+    <label for="subject">Предмет:</label>
+    <select name="subject" required>
+    <option value="" disabled selected>Оберіть предмет</option>
+    {% for subject in subjects %}
+        <option value="{{ subject }}">{{ subject }}</option>
+    {% endfor %}
+    </select>
+    <label for="grade">Оцінка:</label>
+    <input type="text" id="grade" name="grade" required>
+    <label for="student_id">Студент:</label>
+    <select name="student_id" id="student_id" required>
+      {% for student in students %}
+        <option value="{{ student.id }}">{{ student.login }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Додати оцінку</button>
+  </form>
+{% endblock %}

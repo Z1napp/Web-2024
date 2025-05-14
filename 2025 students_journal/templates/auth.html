@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Авторизація</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+</head>
+<body>
+    {% if mode == 'register' %}
+        <h2>Реєстрація</h2>
+        <form id="register-form" method="POST" action="{{ url_for('register') }}">
+            <label for="login">Логін:</label>
+            <input type="text" name="login" required>
+            <label for="password">Пароль:</label>
+            <input type="password" name="password" required>
+            <label for="role">Роль:</label>
+            <select name="role" required>
+                <option value="student">Студент</option>
+                <option value="teacher">Викладач</option>
+                <option value="admin">Адміністратор</option>
+            </select>
+            <button type="submit">Зареєструватися</button>
+        </form>
+        <p>Вже маєте акаунт? <a href="{{ url_for('auth', mode='login') }}">Увійти</a></p>
+
+    {% else %}
+        <h2>Вхід</h2>
+        <form id="login-form" method="POST" action="{{ url_for('login') }}">
+            <label for="login">Логін:</label>
+            <input type="text" name="login" required>
+            <label for="password">Пароль:</label>
+            <input type="password" name="password" required>
+            <button type="submit">Увійти</button>
+        </form>
+        <p>Немає акаунту? <a href="{{ url_for('auth', mode='register') }}">Зареєструватися</a></p>
+    {% endif %}
+</body>
+</html>
