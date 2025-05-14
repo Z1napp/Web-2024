@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Реєстрація</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+<h2>Реєстрація</h2>
+<form method="post">
+    <input type="text" name="login" placeholder="Логін" required><br>
+    <input type="email" name="email" placeholder="Email" required><br>
+    <input type="password" name="password" placeholder="Пароль" required><br>
+    <select name="role" required>
+        <option value="student">Студент</option>
+        <option value="teacher">Викладач</option>
+        <option value="admin">Адмін</option>
+    </select><br>
+    <button type="submit">Зареєструватись</button>
+</form>
+</body>
+</html>
