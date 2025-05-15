@@ -34,7 +34,7 @@ class Grade(db.Model):
     grade = db.Column(db.Integer)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    date = db.Column(db.DateTime, default=datetime.utcnow)  # нове поле з датою
+    date = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 @login_manager.user_loader
@@ -59,31 +59,52 @@ def dashboard():
 
     # Для студентів ...
     if current_user.role == 'student':
-        # Вибрані предмети студента
+        # Вибрані предмети студента (унікальні)
         subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
         subjects = [s[0] for s in subjects]
 
+        # Вибраний предмет отримуємо з GET (після редіректу)
         selected_subject = request.args.get('subject')
 
         if request.method == 'POST':
             selected_subject = request.form['subject']
-            # Після обробки редірект на GET з параметром subject
+            # Перенаправлення на GET з параметром subject для збереження вибору в URL
             return redirect(url_for('dashboard', subject=selected_subject))
 
-        grades_for_subject = []
-        students_grades = {}
+        grades_data = []
 
         if selected_subject:
-            grades_for_subject = Grade.query.filter_by(student_id=current_user.id, subject=selected_subject).all()
-            students_grades = {current_user.login: [g.grade for g in grades_for_subject]}
+            # Запит із JOIN для отримання логіна викладача
+            grades_query = (
+                db.session.query(Grade, User.login.label('teacher_login'))
+                .join(User, Grade.teacher_id == User.id)
+                .filter(Grade.student_id == current_user.id, Grade.subject == selected_subject)
+                .all()
+            )
 
-        return render_template('dashboard_student.html',
-                               name=current_user.login,
-                               role=current_user.role,
-                               subjects=subjects,
-                               selected_subject=selected_subject,
-                               grades_for_subject=grades_for_subject,
-                               students_grades=students_grades)
+            # Формуємо список словників для шаблону
+            for grade, teacher_login in grades_query:
+                grades_data.append({
+                    'grade': grade.grade,
+                    'date': grade.date,
+                    'teacher_login': teacher_login
+                })
+
+        # Обчислюємо середній бал
+        if grades_data:
+            average_grade = round(sum(g['grade'] for g in grades_data) / len(grades_data), 2)
+        else:
+            average_grade = None
+
+        return render_template(
+            'dashboard_student.html',
+            name=current_user.login,
+            role=current_user.role,
+            subjects=subjects,
+            selected_subject=selected_subject,
+            grades_for_subject=grades_data,
+            average_grade=average_grade
+        )
 
     # Для викладача
     elif current_user.role == 'teacher':
@@ -96,8 +117,6 @@ def dashboard():
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else None
 
         students = User.query.filter_by(role='student').all()
-        # subjects = Grade.query.with_entities(Grade.subject).distinct().all()
-        # subjects = [s.subject for s in subjects]
 
         # Додавання оцінки
         if request.method == 'POST' and 'add_grade' in request.form:
@@ -132,15 +151,15 @@ def dashboard():
                     average_per_student[student.login] = average
 
         return render_template('dashboard_teacher.html',
-                                name=current_user.login,
-                                role=current_user.role,
-                                students=students,
-                                subjects=subjects,
-                                selected_subject=selected_subject,
-                                students_grades=students_grades,
-                                average_per_student=average_per_student,
-                                start_date=start_date_str,
-                                end_date=end_date_str)
+                               name=current_user.login,
+                               role=current_user.role,
+                               students=students,
+                               subjects=subjects,
+                               selected_subject=selected_subject,
+                               students_grades=students_grades,
+                               average_per_student=average_per_student,
+                               start_date=start_date_str,
+                               end_date=end_date_str)
 
     # Для адміністратора
     elif current_user.role == 'admin':

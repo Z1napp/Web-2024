@@ -1,37 +1,44 @@
-<!-- dashboard_student.html -->
 {% extends 'dashboard_base.html' %}
 
 {% block content %}
-    <h2>Ваші оцінки</h2>
-    <form method="POST" action="{{ url_for('dashboard') }}">
-        <label for="subject">Виберіть предмет:</label>
-        <select name="subject" required>
-            {% for subject in subjects %}
-                <option value="{{ subject }}">{{ subject }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit">Переглянути оцінки</button>
-    </form>
+  <h2>Ваші оцінки</h2>
 
-    {% if grades_for_subject %}
-        <h3>Оцінки студентів за предметом: {{ request.form['subject'] }}</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Студент</th>
-                    <th>Оцінка</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for student, grades in students_grades.items() %}
-                    {% for grade in grades %}
-                        <tr>
-                            <td>{{ student }}</td>
-                            <td>{{ grade }}</td>
-                        </tr>
-                    {% endfor %}
-                {% endfor %}
-            </tbody>
-        </table>
-    {% endif %}
+  <form method="POST" action="{{ url_for('dashboard') }}">
+    <label for="subject">Виберіть предмет:</label>
+    <select name="subject" required>
+      {% for subject in subjects %}
+        <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>
+          {{ subject }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit">Переглянути оцінки</button>
+  </form>
+
+  {% if grades_for_subject %}
+    <p><strong>Середній бал:</strong>
+      {% if average_grade %}
+        {{ average_grade }}
+      {% else %}
+        Немає оцінок
+      {% endif %}
+    </p>
+
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
+      <thead style="background-color: #f2f2f2;">
+        <tr>
+          <th>Оцінка</th>
+          <th>Дата</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for grade in grades_for_subject %}
+          <tr>
+            <td>{{ grade.grade }}</td>
+            <td>{{ grade.date.strftime('%Y-%m-%d') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 {% endblock %}
