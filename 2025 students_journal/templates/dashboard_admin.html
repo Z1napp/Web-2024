@@ -2,8 +2,37 @@
 {% extends 'dashboard_base.html' %}
 
 {% block content %}
-  <p>Адміністратор має повний доступ до всіх функцій.</p>
-  <form action="{{ url_for('add_student') }}" method="POST">
+  <h2>Користувачі системи</h2>
+
+  <table style="width: 100%; border-collapse: collapse;" border="1" cellpadding="5" cellspacing="0">
+    <tr>
+      <th>ID</th>
+      <th>Логін</th>
+      <th>Роль</th>
+      <th>Дії</th>
+    </tr>
+    {% for user in users %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.login }}</td>
+        <td>{{ user.role }}</td>
+        <td>
+          {% if user.id != current_user.id %}
+            <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" style="display:inline;">
+              <button type="submit" onclick="return confirm('Ви впевнені, що хочете видалити цього користувача?');">Видалити</button>
+            </form>
+          {% else %}
+            (ви)
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
+  <hr>
+
+  <h3>Додати нового користувача</h3>
+  <form action="{{ url_for('add_user') }}" method="POST">
     <label for="login">Логін:</label>
     <input type="text" id="login" name="login" required>
     <label for="password">Пароль:</label>
@@ -12,7 +41,8 @@
     <select name="role" id="role" required>
       <option value="student">Студент</option>
       <option value="teacher">Викладач</option>
+      <option value="admin">Адміністратор</option>
     </select>
-    <button type="submit">Додати студента</button>
+    <button type="submit">Додати користувача</button>
   </form>
 {% endblock %}

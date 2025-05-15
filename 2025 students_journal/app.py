@@ -87,10 +87,18 @@ def dashboard():
         return dashboard_teacher(subjects_all)
 
     elif current_user.role == 'admin':
-        return render_template('dashboard_admin.html', name=current_user.login, role=current_user.role)
+        return dashboard_admin()
 
     return redirect(url_for('logout'))
 
+def dashboard_admin():
+    users = User.query.all()
+    return render_template(
+        'dashboard_admin.html',
+        name=current_user.login,
+        role=current_user.role,
+        users=users
+    )
 
 def dashboard_student(subjects_all):
     # Унікальні предмети студента
@@ -293,7 +301,7 @@ def export_grades():
 
 
 # ------------------------------
-# Маршрут: Додавання користувача (студента)
+# Маршрут: Менеджмент користувачів
 # ------------------------------
 
 @app.route('/add_student', methods=['POST'])
@@ -311,6 +319,48 @@ def add_student():
         flash('Студент доданий успішно!')
     return redirect(url_for('dashboard'))
 
+@app.route('/add_user', methods=['POST'])
+@login_required
+def add_user():
+    if current_user.role != 'admin':
+        abort(403)
+
+    login_val = request.form['login']
+    password = request.form['password']
+    role = request.form['role']
+
+    if User.query.filter_by(login=login_val).first():
+        flash('Користувач з таким логіном вже існує.')
+        return redirect(url_for('dashboard'))
+
+    new_user = User(
+        login=login_val,
+        password=generate_password_hash(password),
+        role=role
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    flash('Користувача додано успішно!')
+    return redirect(url_for('dashboard'))
+
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if current_user.role != 'admin':
+        abort(403)
+    user = User.query.get_or_404(user_id)
+
+    if user.id == current_user.id:
+        flash('Ви не можете видалити свій власний акаунт.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Видаляємо всі оцінки, пов’язані з цим користувачем
+    Grade.query.filter((Grade.student_id == user.id) | (Grade.teacher_id == user.id)).delete()
+
+    db.session.delete(user)
+    db.session.commit()
+    flash('Користувача видалено успішно.', 'success')
+    return redirect(url_for('dashboard'))
 
 # ------------------------------
 # Маршрути: Авторизація, Реєстрація, Вихід
