@@ -1,24 +1,43 @@
-<!-- dashboard_teacher.html -->
 {% extends 'dashboard_base.html' %}
 
 {% block content %}
   <p>Керувати журналом:</p>
-  <form action="{{ url_for('add_grade') }}" method="POST">
+  <form action="{{ url_for('dashboard') }}" method="POST">
     <label for="subject">Предмет:</label>
-    <select name="subject" required>
-    <option value="" disabled selected>Оберіть предмет</option>
-    {% for subject in subjects %}
-        <option value="{{ subject }}">{{ subject }}</option>
-    {% endfor %}
+    <select name="subject" id="subject" required onchange="this.form.submit()">
+      <option value="" disabled {% if not selected_subject %}selected{% endif %}>Оберіть предмет</option>
+      {% for subject in subjects %}
+          <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
+      {% endfor %}
     </select>
     <label for="grade">Оцінка:</label>
-    <input type="text" id="grade" name="grade" required>
+    <input type="number" id="grade" name="grade" required min="1" max="100" step="1" pattern="\d+" title="Оцінка має бути числом від 1 до 100">
     <label for="student_id">Студент:</label>
     <select name="student_id" id="student_id" required>
       {% for student in students %}
         <option value="{{ student.id }}">{{ student.login }}</option>
       {% endfor %}
     </select>
-    <button type="submit">Додати оцінку</button>
+    <button type="submit" name="add_grade">Додати оцінку</button>
   </form>
+
+  {% if students_grades %}
+    <h3>Оцінки студентів за предметом: {{ selected_subject }}</h3>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 50%;">
+      <thead>
+        <tr style="background-color: #f2f2f2;">
+          <th>Студент</th>
+          <th>Оцінки</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student, grades in students_grades.items() %}
+          <tr>
+            <td>{{ student }}</td>
+            <td>{{ grades | join(', ') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 {% endblock %}

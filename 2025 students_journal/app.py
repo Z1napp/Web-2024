@@ -61,7 +61,7 @@ def dashboard():
         "Література"
     ]
 
-    # Для студента
+    # --- ДЛЯ СТУДЕНТА ---
     if current_user.role == 'student':
         subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
         subjects = [s[0] for s in subjects]
@@ -73,29 +73,66 @@ def dashboard():
                 subject=selected_subject
             ).all()
 
-            # Підготовка структури students_grades
             students_grades = {current_user.login: [g.grade for g in grades_for_subject]}
 
             return render_template(
                 'dashboard_student.html',
+                name=current_user.login,
+                role=current_user.role,
                 subjects=subjects,
                 grades_for_subject=grades_for_subject,
                 students_grades=students_grades
             )
 
-        return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, subjects=subjects)
+        return render_template(
+            'dashboard_student.html',
+            name=current_user.login,
+            role=current_user.role,
+            subjects=subjects
+        )
 
-    # Для викладача
+    # --- ДЛЯ ВИКЛАДАЧА ---
     elif current_user.role == 'teacher':
+        selected_subject = None
+        students_grades = {}
 
+        if request.method == 'POST':
+            selected_subject = request.form.get('subject')
 
-        return render_template('dashboard_teacher.html', name=current_user.login, role=current_user.role, students=students, subjects=subjects)
+            # Додавання оцінки
+            if 'add_grade' in request.form and 'grade' in request.form and 'student_id' in request.form:
+                new_grade = Grade(
+                    subject=selected_subject,
+                    grade=request.form['grade'],
+                    student_id=request.form['student_id'],
+                    teacher_id=current_user.id
+                )
+                db.session.add(new_grade)
+                db.session.commit()
 
-    # Для адміністратора
+            # Отримання оцінок для вибраного предмета
+            if selected_subject:
+                grades = Grade.query.filter_by(subject=selected_subject, teacher_id=current_user.id).all()
+                for grade in grades:
+                    students_grades.setdefault(grade.student.login, []).append(grade.grade)
+
+        return render_template(
+            'dashboard_teacher.html',
+            name=current_user.login,
+            role=current_user.role,
+            students=students,
+            subjects=subjects,
+            selected_subject=selected_subject,
+            students_grades=students_grades
+        )
+
+    # --- ДЛЯ АДМІНІСТРАТОРА ---
     elif current_user.role == 'admin':
         return render_template('dashboard_admin.html', name=current_user.login, role=current_user.role)
 
+    # --- Якщо роль не визначено ---
     return redirect(url_for('logout'))
+
 
 
 
