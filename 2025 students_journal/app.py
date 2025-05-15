@@ -83,7 +83,7 @@ def dashboard():
                 students_grades=students_grades
             )
 
-        return render_template('dashboard_student.html', subjects=subjects)
+        return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, subjects=subjects)
 
     # Для викладача
     elif current_user.role == 'teacher':
