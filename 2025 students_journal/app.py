@@ -43,10 +43,6 @@ def load_user(user_id):
 def home():
     return redirect(url_for('dashboard'))
 
-
-
-
-# --- Панель користувача ---
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
@@ -95,26 +91,43 @@ def dashboard():
     elif current_user.role == 'teacher':
         selected_subject = None
         students_grades = {}
+        average_per_student = {}
+        overall_average = None
 
         if request.method == 'POST':
-            selected_subject = request.form.get('subject')
+            if 'add_grade' in request.form:
+                subject = request.form['subject']
+                grade_value = request.form['grade']
+                student_id = request.form['student_id']
 
-            # Додавання оцінки
-            if 'add_grade' in request.form and 'grade' in request.form and 'student_id' in request.form:
                 new_grade = Grade(
-                    subject=selected_subject,
-                    grade=request.form['grade'],
-                    student_id=request.form['student_id'],
+                    subject=subject,
+                    grade=grade_value,
+                    student_id=student_id,
                     teacher_id=current_user.id
                 )
                 db.session.add(new_grade)
                 db.session.commit()
+                selected_subject = subject
+            else:
+                selected_subject = request.form.get('subject')
 
-            # Отримання оцінок для вибраного предмета
-            if selected_subject:
-                grades = Grade.query.filter_by(subject=selected_subject, teacher_id=current_user.id).all()
-                for grade in grades:
-                    students_grades.setdefault(grade.student.login, []).append(grade.grade)
+        # Якщо обрано предмет, зібрати оцінки і середні
+        if selected_subject:
+            for student in students:
+                grades = Grade.query.filter_by(student_id=student.id, subject=selected_subject).all()
+                if grades:
+                    grades_values = [int(g.grade) for g in grades]
+                    students_grades[student.login] = grades_values
+                    average_per_student[student.login] = round(sum(grades_values) / len(grades_values), 2)
+                else:
+                    students_grades[student.login] = []
+                    average_per_student[student.login] = None
+
+            all_grades = db.session.query(Grade.grade).filter_by(subject=selected_subject).all()
+            if all_grades:
+                all_grades_values = [int(g[0]) for g in all_grades]
+                overall_average = round(sum(all_grades_values) / len(all_grades_values), 2)
 
         return render_template(
             'dashboard_teacher.html',
@@ -123,7 +136,9 @@ def dashboard():
             students=students,
             subjects=subjects,
             selected_subject=selected_subject,
-            students_grades=students_grades
+            students_grades=students_grades,
+            average_per_student=average_per_student,
+            overall_average=overall_average
         )
 
     # --- ДЛЯ АДМІНІСТРАТОРА ---
@@ -132,8 +147,6 @@ def dashboard():
 
     # --- Якщо роль не визначено ---
     return redirect(url_for('logout'))
-
-
 
 
 # --- Додати оцінку ---
