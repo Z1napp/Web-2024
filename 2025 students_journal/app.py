@@ -2,6 +2,13 @@ from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+from io import StringIO
+import csv
+from flask import Response
+from flask import request, make_response
+
+# from .models import Grade, User
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -20,18 +27,14 @@ class User(UserMixin, db.Model):
 
 
 # --- Модель оцінок ---
+
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    subject = db.Column(db.String(100), nullable=False)
-    grade = db.Column(db.String(2), nullable=False)
-
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    student = db.relationship('User', foreign_keys=[student_id], backref='grades')
-
-    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    teacher = db.relationship('User', foreign_keys=[teacher_id])
-
-
+    subject = db.Column(db.String(100))
+    grade = db.Column(db.Integer)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    date = db.Column(db.DateTime, default=datetime.utcnow)  # нове поле з датою
 
 
 @login_manager.user_loader
@@ -84,61 +87,58 @@ def dashboard():
 
     # Для викладача
     elif current_user.role == 'teacher':
-        selected_subject = request.args.get('subject')
+        selected_subject = request.args.get('subject') or request.form.get('subject')
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+
+        # Дати як datetime
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else None
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else None
+
+        students = User.query.filter_by(role='student').all()
+        # subjects = Grade.query.with_entities(Grade.subject).distinct().all()
+        # subjects = [s.subject for s in subjects]
+
+        # Додавання оцінки
+        if request.method == 'POST' and 'add_grade' in request.form:
+            grade = int(request.form['grade'])
+            student_id = int(request.form['student_id'])
+            new_grade = Grade(
+                subject=selected_subject,
+                grade=grade,
+                student_id=student_id,
+                teacher_id=current_user.id,
+                date=datetime.utcnow()
+            )
+            db.session.add(new_grade)
+            db.session.commit()
+            return redirect(url_for('dashboard', subject=selected_subject, start_date=start_date_str, end_date=end_date_str))
+
         students_grades = {}
         average_per_student = {}
-        overall_average = None
-
-        if request.method == 'POST':
-            if 'add_grade' in request.form:
-                subject = request.form['subject']
-                grade_value = request.form['grade']
-                student_id = request.form['student_id']
-
-                new_grade = Grade(subject=subject,
-                                  grade=grade_value,
-                                  student_id=student_id,
-                                  teacher_id=current_user.id)
-                db.session.add(new_grade)
-                db.session.commit()
-
-                # Редірект на ту ж сторінку з параметром subject
-                return redirect(url_for('dashboard', subject=subject))
-
-            elif 'delete_grade' in request.form:
-                grade_id = request.form['grade_id']
-                grade_to_delete = Grade.query.get(grade_id)
-                if grade_to_delete:
-                    subject = grade_to_delete.subject
-                    db.session.delete(grade_to_delete)
-                    db.session.commit()
-                    return redirect(url_for('dashboard', subject=subject))
 
         if selected_subject:
             for student in students:
-                grades = Grade.query.filter_by(student_id=student.id, subject=selected_subject).all()
-                if grades:
-                    grades_values = [int(g.grade) for g in grades]
-                    students_grades[student.login] = grades
-                    average_per_student[student.login] = round(sum(grades_values) / len(grades_values), 2)
-                else:
-                    students_grades[student.login] = []
-                    average_per_student[student.login] = None
+                query = Grade.query.filter_by(student_id=student.id, subject=selected_subject)
+                if start_date:
+                    query = query.filter(Grade.date >= start_date)
+                if end_date:
+                    query = query.filter(Grade.date <= end_date)
+                grades = query.all()
 
-            all_grades = db.session.query(Grade.grade).filter_by(subject=selected_subject).all()
-            if all_grades:
-                all_grades_values = [int(g[0]) for g in all_grades]
-                overall_average = round(sum(all_grades_values) / len(all_grades_values), 2)
+                if grades:
+                    students_grades[student.login] = grades
+                    average = round(sum([g.grade for g in grades]) / len(grades), 2)
+                    average_per_student[student.login] = average
 
         return render_template('dashboard_teacher.html',
-                               name=current_user.login,
-                               role=current_user.role,
                                students=students,
                                subjects=subjects,
                                selected_subject=selected_subject,
                                students_grades=students_grades,
                                average_per_student=average_per_student,
-                               overall_average=overall_average)
+                               start_date=start_date_str,
+                               end_date=end_date_str)
 
     # Для адміністратора
     elif current_user.role == 'admin':
@@ -197,6 +197,53 @@ def delete_grade(grade_id):
     db.session.commit()
     flash('Оцінку видалено', 'success')
     return redirect(url_for('dashboard', subject=subject))
+
+@app.route('/export_grades')
+def export_grades():
+    subject = request.args.get('subject')
+    start_date_raw = request.args.get('start_date')
+    end_date_raw = request.args.get('end_date')
+
+    start_date = None if not start_date_raw or start_date_raw == "None" else datetime.strptime(start_date_raw, "%Y-%m-%d")
+    end_date = None if not end_date_raw or end_date_raw == "None" else datetime.strptime(end_date_raw, "%Y-%m-%d")
+
+    # Фільтруємо оцінки
+    query = Grade.query
+    if subject:
+        query = query.filter_by(subject=subject)
+    if start_date:
+        query = query.filter(Grade.date >= start_date)
+    if end_date:
+        query = query.filter(Grade.date <= end_date)
+
+    grades = query.all()
+
+    # Генеруємо CSV
+    si = StringIO()
+    cw = csv.writer(si)
+    # Заголовок
+    cw.writerow(['ID', 'Subject', 'Grade', 'Student', 'Teacher', 'Date'])
+
+    for g in grades:
+        student = User.query.get(g.student_id)
+        teacher = User.query.get(g.teacher_id)
+        cw.writerow([
+            g.id,
+            g.subject,
+            g.grade,
+            student.login if student else 'Unknown',
+            teacher.login if teacher else 'Unknown',
+            g.date.strftime('%Y-%m-%d')
+        ])
+
+    output = si.getvalue()
+    si.close()
+
+    response = make_response(output)
+    response.headers["Content-Disposition"] = "attachment; filename=grades.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
 
 
 # --- Додати студента ---
