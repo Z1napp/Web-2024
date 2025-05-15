@@ -43,53 +43,48 @@ def load_user(user_id):
 def home():
     return redirect(url_for('dashboard'))
 
+from flask import request, redirect, url_for
+
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
     students = User.query.filter_by(role='student').all()
     subjects = [
-        "Математика",
-        "Фізика",
-        "Історія",
-        "Біологія",
-        "Хімія",
-        "Географія",
+        "Математика", "Фізика", "Історія", "Біологія", "Хімія", "Географія",
         "Література"
     ]
 
-    # --- ДЛЯ СТУДЕНТА ---
+    # Для студентів ...
     if current_user.role == 'student':
+        # Вибрані предмети студента
         subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
         subjects = [s[0] for s in subjects]
 
+        selected_subject = request.args.get('subject')
+
         if request.method == 'POST':
             selected_subject = request.form['subject']
-            grades_for_subject = Grade.query.filter_by(
-                student_id=current_user.id,
-                subject=selected_subject
-            ).all()
+            # Після обробки редірект на GET з параметром subject
+            return redirect(url_for('dashboard', subject=selected_subject))
 
+        grades_for_subject = []
+        students_grades = {}
+
+        if selected_subject:
+            grades_for_subject = Grade.query.filter_by(student_id=current_user.id, subject=selected_subject).all()
             students_grades = {current_user.login: [g.grade for g in grades_for_subject]}
 
-            return render_template(
-                'dashboard_student.html',
-                name=current_user.login,
-                role=current_user.role,
-                subjects=subjects,
-                grades_for_subject=grades_for_subject,
-                students_grades=students_grades
-            )
+        return render_template('dashboard_student.html',
+                               name=current_user.login,
+                               role=current_user.role,
+                               subjects=subjects,
+                               selected_subject=selected_subject,
+                               grades_for_subject=grades_for_subject,
+                               students_grades=students_grades)
 
-        return render_template(
-            'dashboard_student.html',
-            name=current_user.login,
-            role=current_user.role,
-            subjects=subjects
-        )
-
-    # --- ДЛЯ ВИКЛАДАЧА ---
+    # Для викладача
     elif current_user.role == 'teacher':
-        selected_subject = None
+        selected_subject = request.args.get('subject')
         students_grades = {}
         average_per_student = {}
         overall_average = None
@@ -100,25 +95,31 @@ def dashboard():
                 grade_value = request.form['grade']
                 student_id = request.form['student_id']
 
-                new_grade = Grade(
-                    subject=subject,
-                    grade=grade_value,
-                    student_id=student_id,
-                    teacher_id=current_user.id
-                )
+                new_grade = Grade(subject=subject,
+                                  grade=grade_value,
+                                  student_id=student_id,
+                                  teacher_id=current_user.id)
                 db.session.add(new_grade)
                 db.session.commit()
-                selected_subject = subject
-            else:
-                selected_subject = request.form.get('subject')
 
-        # Якщо обрано предмет, зібрати оцінки і середні
+                # Редірект на ту ж сторінку з параметром subject
+                return redirect(url_for('dashboard', subject=subject))
+
+            elif 'delete_grade' in request.form:
+                grade_id = request.form['grade_id']
+                grade_to_delete = Grade.query.get(grade_id)
+                if grade_to_delete:
+                    subject = grade_to_delete.subject
+                    db.session.delete(grade_to_delete)
+                    db.session.commit()
+                    return redirect(url_for('dashboard', subject=subject))
+
         if selected_subject:
             for student in students:
                 grades = Grade.query.filter_by(student_id=student.id, subject=selected_subject).all()
                 if grades:
                     grades_values = [int(g.grade) for g in grades]
-                    students_grades[student.login] = grades_values
+                    students_grades[student.login] = grades
                     average_per_student[student.login] = round(sum(grades_values) / len(grades_values), 2)
                 else:
                     students_grades[student.login] = []
@@ -129,23 +130,20 @@ def dashboard():
                 all_grades_values = [int(g[0]) for g in all_grades]
                 overall_average = round(sum(all_grades_values) / len(all_grades_values), 2)
 
-        return render_template(
-            'dashboard_teacher.html',
-            name=current_user.login,
-            role=current_user.role,
-            students=students,
-            subjects=subjects,
-            selected_subject=selected_subject,
-            students_grades=students_grades,
-            average_per_student=average_per_student,
-            overall_average=overall_average
-        )
+        return render_template('dashboard_teacher.html',
+                               name=current_user.login,
+                               role=current_user.role,
+                               students=students,
+                               subjects=subjects,
+                               selected_subject=selected_subject,
+                               students_grades=students_grades,
+                               average_per_student=average_per_student,
+                               overall_average=overall_average)
 
-    # --- ДЛЯ АДМІНІСТРАТОРА ---
+    # Для адміністратора
     elif current_user.role == 'admin':
         return render_template('dashboard_admin.html', name=current_user.login, role=current_user.role)
 
-    # --- Якщо роль не визначено ---
     return redirect(url_for('logout'))
 
 
@@ -168,6 +166,37 @@ def add_grade():
     db.session.commit()
 
     return redirect(url_for('dashboard'))
+
+@app.route('/edit_grade/<int:grade_id>', methods=['POST'])
+@login_required
+def edit_grade(grade_id):
+    grade = Grade.query.get_or_404(grade_id)
+    if current_user.role != 'teacher':
+        abort(403)
+
+    new_grade_value = request.form.get('grade')
+    if not new_grade_value or not new_grade_value.isdigit() or not (1 <= int(new_grade_value) <= 100):
+        flash('Оцінка має бути числом від 1 до 100.', 'error')
+        return redirect(url_for('dashboard'))
+
+    grade.grade = int(new_grade_value)
+    db.session.commit()
+    flash('Оцінку оновлено', 'success')
+    return redirect(url_for('dashboard', subject=grade.subject))
+
+
+@app.route('/delete_grade/<int:grade_id>', methods=['POST'])
+@login_required
+def delete_grade(grade_id):
+    grade = Grade.query.get_or_404(grade_id)
+    if current_user.role != 'teacher':
+        abort(403)
+
+    subject = grade.subject
+    db.session.delete(grade)
+    db.session.commit()
+    flash('Оцінку видалено', 'success')
+    return redirect(url_for('dashboard', subject=subject))
 
 
 # --- Додати студента ---
