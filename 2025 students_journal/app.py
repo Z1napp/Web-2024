@@ -1,14 +1,20 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
+from flask import (
+    Flask, render_template, redirect, url_for, request, flash,
+    make_response
+)
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin, current_user
+from flask_login import (
+    LoginManager, login_user, login_required, logout_user,
+    UserMixin, current_user
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from io import StringIO
 import csv
-from flask import Response
-from flask import request, make_response
 
-# from .models import Grade, User
+# ------------------------------
+# Ініціалізація Flask-додатку
+# ------------------------------
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -18,17 +24,23 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- Модель користувача ---
+
+# ------------------------------
+# Моделі бази даних
+# ------------------------------
+
 class User(UserMixin, db.Model):
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
     login = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(50), nullable=False, default='student')
 
 
-# --- Модель оцінок ---
-
 class Grade(db.Model):
+    __tablename__ = 'grade'
+
     id = db.Column(db.Integer, primary_key=True)
     subject = db.Column(db.String(100))
     grade = db.Column(db.Integer)
@@ -37,138 +49,147 @@ class Grade(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# ------------------------------
+# Логін-менеджер
+# ------------------------------
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# ------------------------------
+# Маршрути: Головна сторінка
+# ------------------------------
+
 @app.route('/')
 def home():
     return redirect(url_for('dashboard'))
 
-from flask import request, redirect, url_for
+
+# ------------------------------
+# Маршрут: Dashboard (для різних ролей)
+# ------------------------------
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    students = User.query.filter_by(role='student').all()
-    subjects = [
+    # Загальні дані
+    subjects_all = [
         "Математика", "Фізика", "Історія", "Біологія", "Хімія", "Географія",
         "Література"
     ]
 
-    # Для студентів ...
     if current_user.role == 'student':
-        # Вибрані предмети студента (унікальні)
-        subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
-        subjects = [s[0] for s in subjects]
+        return dashboard_student(subjects_all)
 
-        # Вибраний предмет отримуємо з GET (після редіректу)
-        selected_subject = request.args.get('subject')
-
-        if request.method == 'POST':
-            selected_subject = request.form['subject']
-            # Перенаправлення на GET з параметром subject для збереження вибору в URL
-            return redirect(url_for('dashboard', subject=selected_subject))
-
-        grades_data = []
-
-        if selected_subject:
-            # Запит із JOIN для отримання логіна викладача
-            grades_query = (
-                db.session.query(Grade, User.login.label('teacher_login'))
-                .join(User, Grade.teacher_id == User.id)
-                .filter(Grade.student_id == current_user.id, Grade.subject == selected_subject)
-                .all()
-            )
-
-            # Формуємо список словників для шаблону
-            for grade, teacher_login in grades_query:
-                grades_data.append({
-                    'grade': grade.grade,
-                    'date': grade.date,
-                    'teacher_login': teacher_login
-                })
-
-        # Обчислюємо середній бал
-        if grades_data:
-            average_grade = round(sum(g['grade'] for g in grades_data) / len(grades_data), 2)
-        else:
-            average_grade = None
-
-        return render_template(
-            'dashboard_student.html',
-            name=current_user.login,
-            role=current_user.role,
-            subjects=subjects,
-            selected_subject=selected_subject,
-            grades_for_subject=grades_data,
-            average_grade=average_grade
-        )
-
-    # Для викладача
     elif current_user.role == 'teacher':
-        selected_subject = request.args.get('subject') or request.form.get('subject')
-        start_date_str = request.args.get('start_date')
-        end_date_str = request.args.get('end_date')
+        return dashboard_teacher(subjects_all)
 
-        # Дати як datetime
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else None
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else None
-
-        students = User.query.filter_by(role='student').all()
-
-        # Додавання оцінки
-        if request.method == 'POST' and 'add_grade' in request.form:
-            grade = int(request.form['grade'])
-            student_id = int(request.form['student_id'])
-            new_grade = Grade(
-                subject=selected_subject,
-                grade=grade,
-                student_id=student_id,
-                teacher_id=current_user.id,
-                date=datetime.utcnow()
-            )
-            db.session.add(new_grade)
-            db.session.commit()
-            return redirect(url_for('dashboard', subject=selected_subject, start_date=start_date_str, end_date=end_date_str))
-
-        students_grades = {}
-        average_per_student = {}
-
-        if selected_subject:
-            for student in students:
-                query = Grade.query.filter_by(student_id=student.id, subject=selected_subject)
-                if start_date:
-                    query = query.filter(Grade.date >= start_date)
-                if end_date:
-                    query = query.filter(Grade.date <= end_date)
-                grades = query.all()
-
-                if grades:
-                    students_grades[student.login] = grades
-                    average = round(sum([g.grade for g in grades]) / len(grades), 2)
-                    average_per_student[student.login] = average
-
-        return render_template('dashboard_teacher.html',
-                               name=current_user.login,
-                               role=current_user.role,
-                               students=students,
-                               subjects=subjects,
-                               selected_subject=selected_subject,
-                               students_grades=students_grades,
-                               average_per_student=average_per_student,
-                               start_date=start_date_str,
-                               end_date=end_date_str)
-
-    # Для адміністратора
     elif current_user.role == 'admin':
         return render_template('dashboard_admin.html', name=current_user.login, role=current_user.role)
 
     return redirect(url_for('logout'))
 
 
-# --- Додати оцінку ---
+def dashboard_student(subjects_all):
+    # Унікальні предмети студента
+    subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
+    subjects = [s[0] for s in subjects]
+
+    selected_subject = request.args.get('subject')
+
+    if request.method == 'POST':
+        selected_subject = request.form['subject']
+        return redirect(url_for('dashboard', subject=selected_subject))
+
+    grades_data = []
+    if selected_subject:
+        grades_query = (
+            db.session.query(Grade, User.login.label('teacher_login'))
+            .join(User, Grade.teacher_id == User.id)
+            .filter(Grade.student_id == current_user.id, Grade.subject == selected_subject)
+            .all()
+        )
+
+        for grade, teacher_login in grades_query:
+            grades_data.append({
+                'grade': grade.grade,
+                'date': grade.date,
+                'teacher_login': teacher_login
+            })
+
+    average_grade = round(sum(g['grade'] for g in grades_data) / len(grades_data), 2) if grades_data else None
+
+    return render_template(
+        'dashboard_student.html',
+        name=current_user.login,
+        role=current_user.role,
+        subjects=subjects,
+        selected_subject=selected_subject,
+        grades_for_subject=grades_data,
+        average_grade=average_grade
+    )
+
+
+def dashboard_teacher(subjects_all):
+    selected_subject = request.args.get('subject') or request.form.get('subject')
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else None
+    end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else None
+
+    students = User.query.filter_by(role='student').all()
+
+    # Додавання оцінки
+    if request.method == 'POST' and 'add_grade' in request.form:
+        grade = int(request.form['grade'])
+        student_id = int(request.form['student_id'])
+        new_grade = Grade(
+            subject=selected_subject,
+            grade=grade,
+            student_id=student_id,
+            teacher_id=current_user.id,
+            date=datetime.utcnow()
+        )
+        db.session.add(new_grade)
+        db.session.commit()
+        return redirect(url_for('dashboard', subject=selected_subject, start_date=start_date_str, end_date=end_date_str))
+
+    students_grades = {}
+    average_per_student = {}
+
+    if selected_subject:
+        for student in students:
+            query = Grade.query.filter_by(student_id=student.id, subject=selected_subject)
+            if start_date:
+                query = query.filter(Grade.date >= start_date)
+            if end_date:
+                query = query.filter(Grade.date <= end_date)
+            grades = query.all()
+
+            if grades:
+                students_grades[student.login] = grades
+                average = round(sum([g.grade for g in grades]) / len(grades), 2)
+                average_per_student[student.login] = average
+
+    return render_template('dashboard_teacher.html',
+                           name=current_user.login,
+                           role=current_user.role,
+                           students=students,
+                           subjects=subjects_all,
+                           selected_subject=selected_subject,
+                           students_grades=students_grades,
+                           average_per_student=average_per_student,
+                           start_date=start_date_str,
+                           end_date=end_date_str)
+
+
+# ------------------------------
+# Маршрути: Управління оцінками
+# ------------------------------
+
 @app.route('/add_grade', methods=['POST'])
 @login_required
 def add_grade():
@@ -178,22 +199,23 @@ def add_grade():
 
     new_grade = Grade(
         subject=subject,
-        grade=grade_value,
-        student_id=student_id,
+        grade=int(grade_value),
+        student_id=int(student_id),
         teacher_id=current_user.id
     )
-
     db.session.add(new_grade)
     db.session.commit()
 
     return redirect(url_for('dashboard'))
+
 
 @app.route('/edit_grade/<int:grade_id>', methods=['POST'])
 @login_required
 def edit_grade(grade_id):
     grade = Grade.query.get_or_404(grade_id)
     if current_user.role != 'teacher':
-        abort(403)
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('dashboard'))
 
     new_grade_value = request.form.get('grade')
     if not new_grade_value or not new_grade_value.isdigit() or not (1 <= int(new_grade_value) <= 100):
@@ -211,7 +233,8 @@ def edit_grade(grade_id):
 def delete_grade(grade_id):
     grade = Grade.query.get_or_404(grade_id)
     if current_user.role != 'teacher':
-        abort(403)
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('dashboard'))
 
     subject = grade.subject
     db.session.delete(grade)
@@ -219,7 +242,13 @@ def delete_grade(grade_id):
     flash('Оцінку видалено', 'success')
     return redirect(url_for('dashboard', subject=subject))
 
+
+# ------------------------------
+# Маршрут: Експорт оцінок CSV
+# ------------------------------
+
 @app.route('/export_grades')
+@login_required
 def export_grades():
     subject = request.args.get('subject')
     start_date_raw = request.args.get('start_date')
@@ -228,7 +257,6 @@ def export_grades():
     start_date = None if not start_date_raw or start_date_raw == "None" else datetime.strptime(start_date_raw, "%Y-%m-%d")
     end_date = None if not end_date_raw or end_date_raw == "None" else datetime.strptime(end_date_raw, "%Y-%m-%d")
 
-    # Фільтруємо оцінки
     query = Grade.query
     if subject:
         query = query.filter_by(subject=subject)
@@ -239,10 +267,8 @@ def export_grades():
 
     grades = query.all()
 
-    # Генеруємо CSV
     si = StringIO()
     cw = csv.writer(si)
-    # Заголовок
     cw.writerow(['ID', 'Subject', 'Grade', 'Student', 'Teacher', 'Date'])
 
     for g in grades:
@@ -266,8 +292,10 @@ def export_grades():
     return response
 
 
+# ------------------------------
+# Маршрут: Додавання користувача (студента)
+# ------------------------------
 
-# --- Додати студента ---
 @app.route('/add_student', methods=['POST'])
 @login_required
 def add_student():
@@ -284,16 +312,16 @@ def add_student():
     return redirect(url_for('dashboard'))
 
 
-# --- Сторінка авторизації ---
+# ------------------------------
+# Маршрути: Авторизація, Реєстрація, Вихід
+# ------------------------------
+
 @app.route('/auth')
 def auth():
     mode = request.args.get('mode', 'login')
     return render_template('auth.html', mode=mode)
 
 
-
-# --- Обробка логіну ---
-# --- Вхід (GET + POST) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -304,15 +332,13 @@ def login():
         if user and check_password_hash(user.password, password_input):
             login_user(user)
             return redirect(url_for('dashboard'))
+
         flash('Неправильний логін або пароль')
         return redirect(url_for('auth'))
 
-    # GET-запит показує форму авторизації
     return render_template('auth.html')
 
 
-
-# --- Обробка реєстрації ---
 @app.route('/register', methods=['POST'])
 def register():
     login_name = request.form['login']
@@ -331,7 +357,6 @@ def register():
     return redirect(url_for('auth'))
 
 
-# --- Вихід ---
 @app.route('/logout')
 @login_required
 def logout():
@@ -339,10 +364,17 @@ def logout():
     return redirect(url_for('auth'))
 
 
-# --- Створити БД ---
+# ------------------------------
+# Створення таблиць БД (при запуску)
+# ------------------------------
+
 with app.app_context():
     db.create_all()
 
+
+# ------------------------------
+# Запуск додатку
+# ------------------------------
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
