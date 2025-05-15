@@ -7,19 +7,34 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
 </head>
 <body>
-  <!-- Навігаційна панель -->
-  <div id="navbar">
-    <div id="user-info">
-      <p>Вітаємо, {{ name }}!</p>
-      <p>Ваша роль: {{ role }}</p>
-    </div>
-    <a href="{{ url_for('logout') }}" id="logout-button">Вийти</a>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul class="flash-messages">
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+<!-- Навігаційна панель -->
+<div id="navbar">
+  <div id="user-info">
+    <p>
+      Вітаємо, {{ current_user.login }}!<br>
+      Ваша роль: {{ current_user.role }}<br>
+      <a href="{{ url_for('profile') }}">Редагувати профіль</a>
+    </p>
   </div>
 
-  <!-- Заголовок -->
-  <div id="header">
-    <h1>Електронний щоденник</h1>
-  </div>
+  <!-- Кнопка Dashboard -->
+  <a href="{{ url_for('dashboard') }}" id="home-button">🏠 Головна</a>
+
+  <!-- Центрований заголовок -->
+  <div id="navbar-title">Електронний щоденник</div>
+
+  <!-- Кнопка Вийти -->
+  <a href="{{ url_for('logout') }}" id="logout-button">Вийти</a>
+</div>
 
   <!-- Контент для ролі -->
   <div id="content">

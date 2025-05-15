@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from io import StringIO
 import csv
+import re
 
 # ------------------------------
 # Ініціалізація Flask-додатку
@@ -66,6 +67,34 @@ def load_user(user_id):
 def home():
     return redirect(url_for('dashboard'))
 
+
+# ------------------------------
+# Маршрут: Profile (для різних ролей)
+# ------------------------------
+
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    if request.method == "POST":
+        login = request.form.get("login")
+
+        # Перевірка логіну на правильність
+        if not re.match(r'^[a-zA-Z0-9_]{3,20}$', login):
+            flash("Логін має містити лише латинські літери, цифри та _, довжина 3–20 символів")
+            return redirect(url_for("profile"))
+
+        # Перевірка чи логін вже зайнятий іншим користувачем
+        existing_user = User.query.filter_by(login=login).first()
+        if existing_user and existing_user.id != current_user.id:
+            flash("Такий логін уже існує")
+            return redirect(url_for("profile"))
+
+        # Оновлюємо логін
+        current_user.login = login
+        db.session.commit()
+        flash("Логін оновлено")
+
+    return render_template("profile.html", user=current_user)
 
 # ------------------------------
 # Маршрут: Dashboard (для різних ролей)

@@ -26,6 +26,25 @@ body {
   flex-wrap: wrap;
 }
 
+#navbar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
+#home-button {
+  margin-left: auto;
+  margin-right: 10px;
+  text-decoration: none;
+  color: #333;
+  font-weight: bold;
+}
+
+#home-button:hover {
+  text-decoration: underline;
+}
 
 #user-info {
   display: flex;
