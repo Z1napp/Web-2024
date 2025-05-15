@@ -3,7 +3,7 @@
 {% block content %}
   <p>Керувати журналом:</p>
 
-  <!-- Вибір предмета + фільтр за датою -->
+  <!-- Вибір предмета -->
   <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm">
     <label for="subject">Предмет:</label>
     <select name="subject" id="subject" required onchange="document.getElementById('filterForm').submit()">
@@ -12,15 +12,10 @@
         <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
       {% endfor %}
     </select>
-
-    <label for="start_date">Дата від:</label>
-    <input type="date" id="start_date" name="start_date" value="{{ start_date or '' }}" onchange="document.getElementById('filterForm').submit()">
-
-    <label for="end_date">Дата до:</label>
-    <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}" onchange="document.getElementById('filterForm').submit()">
   </form>
 
   {% if selected_subject %}
+
   <!-- Додавання оцінки -->
   <form action="{{ url_for('dashboard') }}" method="POST" style="margin-top: 1em;">
     <input type="hidden" name="subject" value="{{ selected_subject }}">
@@ -36,43 +31,51 @@
   </form>
 
   {% if students_grades %}
+
   <h3>Оцінки студентів за предметом: {{ selected_subject }}</h3>
-  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-top: 1em;">
+
+  <!-- Фільтр за датою під заголовком -->
+  <form method="GET" action="{{ url_for('dashboard') }}" id="dateFilterForm" style="margin-bottom: 1em;">
+    <input type="hidden" name="subject" value="{{ selected_subject }}">
+    <label for="start_date">Дата від:</label>
+    <input type="date" id="start_date" name="start_date" value="{{ start_date or '' }}" onchange="document.getElementById('dateFilterForm').submit()">
+
+    <label for="end_date">Дата до:</label>
+    <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}" onchange="document.getElementById('dateFilterForm').submit()">
+  </form>
+
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
     <thead>
       <tr style="background-color: #f2f2f2;">
-        <th>Студент</th>
-        <th>Оцінка + Дата</th>
-        <th>Середній бал</th>
-        <th>Дії</th>
+        <th style="text-align: left;">Студент</th>
+        <th style="text-align: left;">Оцінка</th>
+        <th style="text-align: left;">Дата</th>
+        <th style="text-align: right;">Дії</th>
       </tr>
     </thead>
     <tbody>
       {% for student, grades in students_grades.items() %}
-        <tr>
-          <td>{{ student }}</td>
-          <td>
-            {% for grade in grades %}
-              <form action="{{ url_for('edit_grade', grade_id=grade.id) }}" method="POST" style="display:inline-block; margin-right: 10px;">
+        {% for grade in grades %}
+          <tr>
+            <td style="text-align: left;">{{ student }}</td>
+            <td style="text-align: left;">
+              {{ grade.grade }}
+            </td>
+            <td style="text-align: left;">
+              {{ grade.date.strftime('%Y-%m-%d') }}
+            </td>
+            <td style="text-align: right;">
+              <form action="{{ url_for('edit_grade', grade_id=grade.id) }}" method="POST" style="display: inline-block; margin-right: 10px;">
                 <input type="number" name="grade" value="{{ grade.grade }}" min="1" max="100" step="1" style="width: 50px;" required>
                 <button type="submit">Оновити</button>
               </form>
-              <small>{{ grade.date.strftime('%Y-%m-%d') }}</small>
 
-              <form action="{{ url_for('delete_grade', grade_id=grade.id) }}" method="POST" style="display:inline-block;">
+              <form action="{{ url_for('delete_grade', grade_id=grade.id) }}" method="POST" style="display: inline-block;">
                 <button type="submit" onclick="return confirm('Ви впевнені, що хочете видалити цю оцінку?');">Видалити</button>
               </form>
-              <br/>
-            {% endfor %}
-          </td>
-          <td>
-            {% if average_per_student[student] is not none %}
-              {{ average_per_student[student] }}
-            {% else %}
-              -
-            {% endif %}
-          </td>
-          <td><!-- Місце для додаткових дій --></td>
-        </tr>
+            </td>
+          </tr>
+        {% endfor %}
       {% endfor %}
     </tbody>
   </table>

@@ -132,13 +132,15 @@ def dashboard():
                     average_per_student[student.login] = average
 
         return render_template('dashboard_teacher.html',
-                               students=students,
-                               subjects=subjects,
-                               selected_subject=selected_subject,
-                               students_grades=students_grades,
-                               average_per_student=average_per_student,
-                               start_date=start_date_str,
-                               end_date=end_date_str)
+                                name=current_user.login,
+                                role=current_user.role,
+                                students=students,
+                                subjects=subjects,
+                                selected_subject=selected_subject,
+                                students_grades=students_grades,
+                                average_per_student=average_per_student,
+                                start_date=start_date_str,
+                                end_date=end_date_str)
 
     # Для адміністратора
     elif current_user.role == 'admin':
