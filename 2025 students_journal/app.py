@@ -63,20 +63,27 @@ def dashboard():
 
     # Для студента
     if current_user.role == 'student':
-        grades = {grade.subject: grade.grade for grade in current_user.grades}
+        subjects = db.session.query(Grade.subject).filter_by(student_id=current_user.id).distinct().all()
+        subjects = [s[0] for s in subjects]
 
         if request.method == 'POST':
             selected_subject = request.form['subject']
-            grades_for_subject = Grade.query.filter_by(subject=selected_subject).all()
-            students_grades = {student.login: [] for student in students}
+            grades_for_subject = Grade.query.filter_by(
+                student_id=current_user.id,
+                subject=selected_subject
+            ).all()
 
-            for grade in grades_for_subject:
-                student = User.query.get(grade.student_id)
-                students_grades[student.login].append(grade.grade)
+            # Підготовка структури students_grades
+            students_grades = {current_user.login: [g.grade for g in grades_for_subject]}
 
-            return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, grades=grades, subjects=subjects, students_grades=students_grades, selected_subject=selected_subject)
+            return render_template(
+                'dashboard_student.html',
+                subjects=subjects,
+                grades_for_subject=grades_for_subject,
+                students_grades=students_grades
+            )
 
-        return render_template('dashboard_student.html', name=current_user.login, role=current_user.role, grades=grades, subjects=subjects)
+        return render_template('dashboard_student.html', subjects=subjects)
 
     # Для викладача
     elif current_user.role == 'teacher':
@@ -96,16 +103,20 @@ def dashboard():
 @app.route('/add_grade', methods=['POST'])
 @login_required
 def add_grade():
-    if current_user.role in ['teacher', 'admin']:
-        subject = request.form['subject']
-        grade = request.form['grade']
-        student_id = request.form['student_id']
+    subject = request.form['subject']
+    grade_value = request.form['grade']
+    student_id = request.form['student_id']
 
-        new_grade = Grade(subject=subject, grade=grade, student_id=student_id)
-        db.session.add(new_grade)
-        db.session.commit()
+    new_grade = Grade(
+        subject=subject,
+        grade=grade_value,
+        student_id=student_id,
+        teacher_id=current_user.id
+    )
 
-        flash('Оцінка додана успішно!')
+    db.session.add(new_grade)
+    db.session.commit()
+
     return redirect(url_for('dashboard'))
 
 
