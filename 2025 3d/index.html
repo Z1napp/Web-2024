@@ -1,22 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Three.js Model Switching</title>
+    <title>Three.js Model Switching & Simple Movement</title>
     <style>
-        body { margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f0f0f0; }
+        body { margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f0f0f0; font-family: sans-serif; }
         canvas { display: block; }
-        .controls { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
-        button { padding: 10px 15px; cursor: pointer; border: 1px solid #ccc; background-color: #eee; }
-        button.active { background-color: #ddd; }
+        .controls { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 10; }
+        button { padding: 10px 15px; cursor: pointer; border: 1px solid #ccc; background-color: #eee; border-radius: 5px; transition: background-color 0.2s; }
+        button:hover { background-color: #e0e0e0; }
+        button.active { background-color: #ddd; border-color: #999; }
+
+        .instructions { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.8); padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; font-size: 0.9em; color: #333; z-index: 10; }
+        .instructions p { margin: 5px 0; }
     </style>
 </head>
 <body>
     <div class="controls">
         <button data-model="cube" class="active">Cube</button>
         <button data-model="sphere">Sphere</button>
-        <button data-model="cylinder">Cylinder</button>
+        <button data-model="cylinder">Cylinder (Movable)</button>
         <button data-model="torus">Torus</button>
     </div>
+
+    <div class="instructions">
+        <p><strong>Mouse:</strong> Rotate selected model (except Cylinder)</p>
+        <p><strong>Cylinder Controls (when Cylinder is selected):</strong></p>
+        <p><strong>W / Up Arrow:</strong> Move Forward</p>
+        <p><strong>S / Down Arrow:</strong> Move Backward</p>
+        <p><strong>A / Left Arrow:</strong> Move Left</p>
+        <p><strong>D / Right Arrow:</strong> Move Right</p>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         let scene, camera, renderer, currentModel;
@@ -26,45 +40,66 @@
         const windowHalfY = window.innerHeight / 2;
         const models = {};
 
+        // Movement variables
+        const keyboard = {};
+        const moveSpeed = 0.1; // Increased speed for noticeable movement
+
         init();
         animate();
 
         function init() {
             // Scene
             scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa0a0a0); // Light grey background
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.z = 5;
+            camera.position.y = 1; // Elevate camera a bit
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // Materials
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5).normalize();
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Add a ground plane
+            const planeGeometry = new THREE.PlaneGeometry(100, 100);
+            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x808080, side: THREE.DoubleSide });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = -Math.PI / 2;
+            plane.position.y = -1;
+            plane.receiveShadow = true;
+            scene.add(plane);
+
+            // Material for geometric shapes (now using MeshStandardMaterial for lighting)
+            const basicMaterial = new THREE.MeshStandardMaterial({ color: 0x0077ff, wireframe: false, flatShading: true });
 
             // Models
-            models.cube = new THREE.Mesh(new THREE.BoxGeometry(), material);
-            models.sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), material);
-            models.cylinder = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2, 32), material);
-            models.torus = new THREE.Mesh(new THREE.TorusGeometry(1, 0.4, 16, 100), material);
+            models.cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), basicMaterial);
+            models.sphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), basicMaterial);
+            // Cylinder is now the movable model
+            models.cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.5, 32), basicMaterial);
+            models.torus = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.3, 16, 100), basicMaterial);
 
             // Set initial model
             currentModel = models.cube;
             scene.add(currentModel);
 
-            // Lighting (optional)
-            const ambientLight = new THREE.AmbientLight(0x404040);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-            directionalLight.position.set(1, 1, 1).normalize();
-            scene.add(directionalLight);
-
             // Event Listeners
             document.addEventListener('mousemove', onDocumentMouseMove, false);
             window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
 
             // Button Event Listeners
             const buttons = document.querySelectorAll('.controls button');
@@ -77,19 +112,40 @@
                     this.classList.add('active');
                 });
             });
+
+            // Ensure shadows are enabled on the renderer
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         }
 
         function switchModel(modelName) {
             if (currentModel) {
                 scene.remove(currentModel);
+                // Reset rotation and position for the previously active model
+                currentModel.rotation.set(0, 0, 0);
+                currentModel.position.set(0, 0, 0); // Reset position
             }
-            currentModel = models.hasOwnProperty(modelName) ? models [modelName] : models.cube; // Default to cube if not found
+
+            if (models.hasOwnProperty(modelName)) {
+                currentModel = models[modelName];
+            } else {
+                console.warn(`Model "${modelName}" not found. Defaulting to Cube.`);
+                currentModel = models.cube;
+            }
+
+            // Adjust initial Y position for models to sit on the plane
+            // All simple models will sit centered at Y=0, so if plane is at Y=-1, they need to be at Y=-0.25 (half of their height/scale)
+            currentModel.position.y = 0; // Or adjust based on your model's pivot/height relative to the plane
+
             scene.add(currentModel);
         }
 
         function onDocumentMouseMove(event) {
-            mouseX = (event.clientX - windowHalfX);
-            mouseY = (event.clientY - windowHalfY);
+            // Only apply mouse rotation if currentModel is NOT the cylinder
+            if (currentModel !== models.cylinder) {
+                mouseX = (event.clientX - windowHalfX);
+                mouseY = (event.clientY - windowHalfY);
+            }
         }
 
         function onWindowResize() {
@@ -98,13 +154,39 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        function onKeyDown(event) {
+            keyboard[event.code] = true;
+        }
+
+        function onKeyUp(event) {
+            keyboard[event.code] = false;
+        }
+
         function animate() {
             requestAnimationFrame(animate);
 
-            targetX = mouseX * 0.001;
-            targetY = mouseY * 0.001;
+            if (currentModel === models.cylinder && currentModel) {
+                // Cylinder movement controls (now translating along X and Z)
+                if (keyboard['KeyW'] || keyboard['ArrowUp']) {
+                    currentModel.position.z -= moveSpeed; // Move forward (negative Z)
+                }
+                if (keyboard['KeyS'] || keyboard['ArrowDown']) {
+                    currentModel.position.z += moveSpeed; // Move backward (positive Z)
+                }
+                if (keyboard['KeyA'] || keyboard['ArrowLeft']) {
+                    currentModel.position.x -= moveSpeed; // Move left (negative X)
+                }
+                if (keyboard['KeyD'] || keyboard['ArrowRight']) {
+                    currentModel.position.x += moveSpeed; // Move right (positive X)
+                }
+                // Keep cylinder's Y position fixed relative to the ground
+                currentModel.position.y = 0; // Centered at origin for basic shapes
 
-            if (currentModel) {
+            } else if (currentModel) {
+                // Regular model rotation based on mouse
+                targetX = mouseX * 0.001;
+                targetY = mouseY * 0.001;
+
                 currentModel.rotation.y += (targetX - currentModel.rotation.y) * 0.05;
                 currentModel.rotation.x += (targetY - currentModel.rotation.x) * 0.05;
             }
