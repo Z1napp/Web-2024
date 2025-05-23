@@ -1,2 +1,2 @@
-# Web discipline practical tasks
+# Web practical tasks
 PI-23
